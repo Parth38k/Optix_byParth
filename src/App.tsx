@@ -6,6 +6,7 @@ import { ContextAwareBuilder } from '@/screens/StrategyBuilderScreen';
 import PositionsDashboard from '@/screens/PositionsDashboard';
 import GreeksLabScreen from '@/screens/GreeksLabScreen';
 import StrategyRecommender from '@/screens/StrategyRecommender';
+import IntelligenceScreen from '@/screens/IntelligenceScreen';
 
 const C = {
   bg:         '#06080f',
@@ -23,17 +24,18 @@ const C = {
 const goldGrad = 'linear-gradient(135deg,#c9a84c,#e2c97e,#b8960a)';
 
 function TopNav() {
-  const { screen, setScreen, userProfile } = useAppState();
+  const { screen, setScreen, userProfile, goToIntelligence } = useAppState();
 
   const tierColor = userProfile
     ? userProfile.tier === 'Advanced' ? C.green : userProfile.tier === 'Standard' ? C.orange : C.red
     : C.textMid;
 
-  const navLinks: { key: typeof screen; label: string }[] = [
+  const navLinks: { key: typeof screen; label: string; onClick?: () => void }[] = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'positions', label: 'Positions' },
     { key: 'greeks-lab', label: 'Greeks Lab' },
     { key: 'recommender', label: 'Recommender' },
+    { key: 'intelligence', label: '⚡ Intelligence', onClick: goToIntelligence },
   ];
 
   return (
@@ -66,7 +68,7 @@ function TopNav() {
           return (
             <button
               key={link.key}
-              onClick={() => setScreen(link.key)}
+              onClick={() => link.onClick ? link.onClick() : setScreen(link.key)}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -124,12 +126,13 @@ function AppRouter() {
       <TopNav />
       {(() => {
         switch (screen) {
-          case 'dashboard':   return <DashboardScreen />;
-          case 'builder':     return <ContextAwareBuilder onBack={goToDashboard} />;
-          case 'positions':   return <PositionsDashboard />;
-          case 'greeks-lab':  return <GreeksLabScreen />;
-          case 'recommender': return <StrategyRecommender />;
-          default:            return <DashboardScreen />;
+          case 'dashboard':    return <DashboardScreen />;
+          case 'builder':      return <ContextAwareBuilder onBack={goToDashboard} />;
+          case 'positions':    return <PositionsDashboard />;
+          case 'greeks-lab':   return <GreeksLabScreen />;
+          case 'recommender':  return <StrategyRecommender />;
+          case 'intelligence': return <IntelligenceScreen />;
+          default:             return <DashboardScreen />;
         }
       })()}
     </>
