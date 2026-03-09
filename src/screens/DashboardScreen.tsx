@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppState } from '@/contexts/AppState';
 import { TICKERS, STRATEGIES, STRATEGY_EXPLANATIONS, SECTOR_COLORS } from '@/lib/instruments';
 import TickerCard from '@/components/TickerCard';
+import InfoTooltip from '@/components/InfoTooltip';
 
 const C = {
   bg:         '#06080f',
@@ -230,6 +231,7 @@ export default function DashboardScreen() {
                   info={info}
                   selected={selected}
                   explanation={exp?.simple || ''}
+                  layman={exp?.layman || ''}
                   onClick={() => setStrat(name)}
                   onBuild={() => { setStrat(name); goToBuilder(); }}
                 />
@@ -274,11 +276,12 @@ interface StratCardProps {
   info: { risk: 'Low' | 'Med' | 'High'; view: string; legs: number };
   selected: boolean;
   explanation: string;
+  layman: string;
   onClick: () => void;
   onBuild: () => void;
 }
 
-function StratCard({ name, info, selected, explanation, onClick, onBuild }: StratCardProps) {
+function StratCard({ name, info, selected, explanation, layman, onClick, onBuild }: StratCardProps) {
   const [hovered, setHovered] = useState(false);
   const riskColor = RISK_COLORS[info.risk];
 
@@ -296,7 +299,10 @@ function StratCard({ name, info, selected, explanation, onClick, onBuild }: Stra
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: selected ? C.gold : C.text }}>{name}</div>
+        <div style={{ fontWeight: 600, fontSize: 14, color: selected ? C.gold : C.text, display: 'flex', alignItems: 'center' }}>
+          {name}
+          <InfoTooltip text={layman} />
+        </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{
             fontSize: 10, padding: '2px 7px', borderRadius: 4,

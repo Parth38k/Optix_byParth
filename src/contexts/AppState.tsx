@@ -25,7 +25,7 @@ export interface Position {
   notes?: string;
 }
 
-type Screen = 'onboarding' | 'dashboard' | 'builder' | 'positions' | 'greeks-lab' | 'recommender';
+type Screen = 'onboarding' | 'dashboard' | 'builder' | 'positions' | 'greeks-lab' | 'recommender' | 'intelligence';
 
 interface AppStateContextType {
   screen: Screen;
@@ -49,9 +49,52 @@ interface AppStateContextType {
   goToPositions: () => void;
   goToGreeksLab: () => void;
   goToRecommender: () => void;
+  goToIntelligence: () => void;
+  priceSource: 'live' | 'simulated';
+  polygonApiKey: string;
+  setPolygonApiKey: (key: string) => void;
 }
 
 const AppStateContext = createContext<AppStateContextType | null>(null);
+
+const YAHOO_PROXY = 'https://api.allorigins.win/raw?url=';
+const BATCH_SIZE = 8;
+const BATCH_DELAY_MS = 300;
+
+async function fetchYahooPrice(sym: string): Promise<number | null> {
+  try {
+    const encoded = encodeURIComponent(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`
+    );
+    const res = await fetch(`${YAHOO_PROXY}${encoded}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    return typeof price === 'number' ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPolygonPrice(sym: string, apiKey: string): Promise<number | null> {
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(
+      `https://api.polygon.io/v2/last/trade/${sym}?apikey=${apiKey}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const price = data?.results?.p;
+    return typeof price === 'number' ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [screen, setScreen] = useState<Screen>('onboarding');
@@ -63,6 +106,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [history, setHistory] = useState<Record<string, number[]>>({});
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [positions, setPositions] = useState<Position[]>([]);
+  const [priceSource, setPriceSource] = useState<'live' | 'simulated'>('simulated');
+  const [polygonApiKey, setPolygonApiKeyState] = useState<string>(() => {
+    try { return localStorage.getItem('optix_polygon_key') || ''; } catch { return ''; }
+  });
 
   // Initialize prices from seed values
   useEffect(() => {
@@ -95,17 +142,74 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Live price simulation — updates every 3 seconds
+  // Live price fetching
   const pricesRef = useRef(prices);
   pricesRef.current = prices;
+  const polygonKeyRef = useRef(polygonApiKey);
+  polygonKeyRef.current = polygonApiKey;
 
+  const fetchAllPrices = useCallback(async () => {
+    const syms = TICKERS.map(t => t.sym);
+    const batches: string[][] = [];
+    for (let i = 0; i < syms.length; i += BATCH_SIZE) {
+      batches.push(syms.slice(i, i + BATCH_SIZE));
+    }
+
+    const fetched: Record<string, number> = {};
+    let anyLive = false;
+
+    for (let b = 0; b < batches.length; b++) {
+      if (b > 0) await sleep(BATCH_DELAY_MS);
+      const batch = batches[b];
+      await Promise.all(batch.map(async sym => {
+        let price = await fetchYahooPrice(sym);
+        if (price === null && polygonKeyRef.current) {
+          price = await fetchPolygonPrice(sym, polygonKeyRef.current);
+        }
+        if (price !== null && price > 0) {
+          fetched[sym] = price;
+          anyLive = true;
+        }
+      }));
+    }
+
+    if (anyLive) {
+      setPrevPrices({ ...pricesRef.current });
+      setPrices(prev => {
+        const next = { ...prev };
+        Object.keys(fetched).forEach(sym => { next[sym] = fetched[sym]; });
+        return next;
+      });
+      setHistory(prev => {
+        const next: Record<string, number[]> = { ...prev };
+        Object.keys(fetched).forEach(sym => {
+          const arr = [...(prev[sym] || []), fetched[sym]];
+          if (arr.length > 50) arr.shift();
+          next[sym] = arr;
+        });
+        return next;
+      });
+      setLastUpdate(new Date().toLocaleTimeString());
+      setPriceSource('live');
+    } else {
+      setPriceSource('simulated');
+    }
+  }, []);
+
+  // Fetch real prices every 60 seconds
+  useEffect(() => {
+    fetchAllPrices();
+    const interval = setInterval(fetchAllPrices, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchAllPrices]);
+
+  // Apply tiny noise every 5 seconds between real fetches
   useEffect(() => {
     const interval = setInterval(() => {
-      setPrevPrices({ ...pricesRef.current });
       setPrices(prev => {
         const next: Record<string, number> = {};
         Object.keys(prev).forEach(sym => {
-          const noise = 1 + (Math.random() - 0.5) * 0.01; // ±0.5%
+          const noise = 1 + (Math.random() - 0.5) * 0.001; // ±0.05%
           next[sym] = Math.max(0.01, parseFloat((prev[sym] * noise).toFixed(2)));
         });
         return next;
@@ -119,9 +223,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         });
         return next;
       });
-      setLastUpdate(new Date().toLocaleTimeString());
-    }, 3000);
+      if (!lastUpdate) setLastUpdate(new Date().toLocaleTimeString());
+    }, 5_000);
     return () => clearInterval(interval);
+  }, [lastUpdate]);
+
+  const setPolygonApiKey = useCallback((key: string) => {
+    setPolygonApiKeyState(key);
+    try { localStorage.setItem('optix_polygon_key', key); } catch { /* ignore */ }
   }, []);
 
   const setUserProfile = useCallback((p: UserProfile) => {
@@ -163,6 +272,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const goToPositions = useCallback(() => setScreen('positions'), []);
   const goToGreeksLab = useCallback(() => setScreen('greeks-lab'), []);
   const goToRecommender = useCallback(() => setScreen('recommender'), []);
+  const goToIntelligence = useCallback(() => setScreen('intelligence'), []);
 
   return (
     <AppStateContext.Provider
@@ -173,7 +283,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         strat, setStrat,
         prices, prevPrices, history, lastUpdate,
         positions, addPosition, updatePositionNotes, closePosition,
-        goToBuilder, goToDashboard, goToPositions, goToGreeksLab, goToRecommender,
+        goToBuilder, goToDashboard, goToPositions, goToGreeksLab, goToRecommender, goToIntelligence,
+        priceSource, polygonApiKey, setPolygonApiKey,
       }}
     >
       {children}

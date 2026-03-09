@@ -5,6 +5,8 @@ import {
   bsPrice, bsGreeks, calcPayoff, calcAggGreeks, calcMeta, buildDefaultLegs, daysToExpiry, R,
   type Leg, type OptionType, type Direction,
 } from '@/lib/blackScholes';
+import InfoTooltip from '@/components/InfoTooltip';
+import { GLOSSARY } from '@/lib/glossary';
 
 const C = {
   bg:         '#06080f',
@@ -137,7 +139,7 @@ function ScenarioTable({ legs, spot }: { legs: Leg[]; spot: number }) {
 }
 
 // ── GreekBar ──────────────────────────────────────────────────────────────────
-function GreekBar({ label, value, max, desc }: { label: string; value: number; max: number; desc: string }) {
+function GreekBar({ label, value, max, desc, glossaryKey }: { label: string; value: number; max: number; desc: string; glossaryKey?: string }) {
   const [tip, setTip] = useState(false);
   const pct = Math.min(100, (Math.abs(value) / max) * 100);
   const color = value >= 0 ? C.green : C.red;
@@ -149,7 +151,10 @@ function GreekBar({ label, value, max, desc }: { label: string; value: number; m
       onMouseLeave={() => setTip(false)}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ color: C.textMid, fontSize: 12 }}>{label}</span>
+        <span style={{ color: C.textMid, fontSize: 12, display: 'flex', alignItems: 'center' }}>
+          {label}
+          {glossaryKey && <InfoTooltip text={GLOSSARY[glossaryKey] || ''} />}
+        </span>
         <span style={{ fontFamily: C.mono, fontSize: 12, color }}>{value.toFixed(4)}</span>
       </div>
       <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
@@ -383,7 +388,14 @@ export function ContextAwareBuilder({ onBack }: { onBack: () => void }) {
         {activeTab === 'build' && (
           <div>
             <div style={{ marginBottom: 12, display: 'grid', gridTemplateColumns: '100px 80px 90px 90px 70px 70px 1fr 80px', gap: 10, padding: '0 0 8px', fontSize: 11, color: C.textMid }}>
-              <div>Direction</div><div>Type</div><div>Strike</div><div>Expiry</div><div>Qty</div><div>IV %</div><div style={{ textAlign: 'right' }}>Net Premium</div><div></div>
+              <div>Direction</div>
+              <div>Type</div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>Strike<InfoTooltip text={GLOSSARY['Strike']} /></div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>Expiry / DTE<InfoTooltip text={GLOSSARY['DTE']} /></div>
+              <div>Qty</div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>IV %<InfoTooltip text={GLOSSARY['IV']} /></div>
+              <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>Net Premium<InfoTooltip text={GLOSSARY['Premium']} /></div>
+              <div></div>
             </div>
             {legs.map(leg => (
               <LegRow
@@ -414,15 +426,18 @@ export function ContextAwareBuilder({ onBack }: { onBack: () => void }) {
             <div style={{ color: C.textMid, fontSize: 12, marginBottom: 16 }}>Payoff at Expiry</div>
             <PayoffChart legs={legs} spot={spot} />
             <div style={{ display: 'flex', gap: 16, marginTop: 16, justifyContent: 'center' }}>
-              <div style={{ fontFamily: C.mono, fontSize: 12, color: C.green }}>
+              <div style={{ fontFamily: C.mono, fontSize: 12, color: C.green, display: 'flex', alignItems: 'center' }}>
                 Max Profit: {meta.maxProfit === 'unlimited' ? '∞' : `$${(meta.maxProfit as number).toFixed(0)}`}
+                <InfoTooltip text={GLOSSARY['Max Profit']} />
               </div>
-              <div style={{ fontFamily: C.mono, fontSize: 12, color: C.red }}>
+              <div style={{ fontFamily: C.mono, fontSize: 12, color: C.red, display: 'flex', alignItems: 'center' }}>
                 Max Loss: {meta.maxLoss === 'unlimited' ? '∞' : `$${Math.abs(meta.maxLoss as number).toFixed(0)}`}
+                <InfoTooltip text={GLOSSARY['Max Loss']} />
               </div>
               {meta.breakEvens.length > 0 && (
-                <div style={{ fontFamily: C.mono, fontSize: 12, color: C.textMid }}>
+                <div style={{ fontFamily: C.mono, fontSize: 12, color: C.textMid, display: 'flex', alignItems: 'center' }}>
                   Break-Even{meta.breakEvens.length > 1 ? 's' : ''}: {meta.breakEvens.map(b => `$${b.toFixed(2)}`).join(', ')}
+                  <InfoTooltip text={GLOSSARY['Break-even']} />
                 </div>
               )}
             </div>
@@ -432,11 +447,11 @@ export function ContextAwareBuilder({ onBack }: { onBack: () => void }) {
         {activeTab === 'greeks' && (
           <div style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}` }}>
             <div style={{ color: C.textMid, fontSize: 12, marginBottom: 20 }}>Portfolio Greeks (Aggregate)</div>
-            <GreekBar label="Delta (Δ)" value={greeks.delta} max={200} desc="Sensitivity to $1 price move" />
-            <GreekBar label="Gamma (Γ)" value={greeks.gamma} max={10} desc="Rate of change of delta" />
-            <GreekBar label="Theta (Θ)" value={greeks.theta} max={50} desc="Daily time decay (per day)" />
-            <GreekBar label="Vega (V)" value={greeks.vega} max={100} desc="Sensitivity to 1% IV change" />
-            <GreekBar label="Rho (ρ)" value={greeks.rho} max={50} desc="Sensitivity to 1% rate change" />
+            <GreekBar label="Delta (Δ)" value={greeks.delta} max={200} desc="Sensitivity to $1 price move" glossaryKey="Delta" />
+            <GreekBar label="Gamma (Γ)" value={greeks.gamma} max={10} desc="Rate of change of delta" glossaryKey="Gamma" />
+            <GreekBar label="Theta (Θ)" value={greeks.theta} max={50} desc="Daily time decay (per day)" glossaryKey="Theta" />
+            <GreekBar label="Vega (V)" value={greeks.vega} max={100} desc="Sensitivity to 1% IV change" glossaryKey="Vega" />
+            <GreekBar label="Rho (ρ)" value={greeks.rho} max={50} desc="Sensitivity to 1% rate change" glossaryKey="Rho" />
           </div>
         )}
 
@@ -459,13 +474,15 @@ export function ContextAwareBuilder({ onBack }: { onBack: () => void }) {
                   { label: 'Strategy', value: strat },
                   { label: 'Spot Price', value: `$${spot.toFixed(2)}` },
                   { label: 'Net Cost', value: `${totalCost < 0 ? '+' : '-'}$${Math.abs(totalCost).toFixed(2)} ${totalCost < 0 ? 'Credit' : 'Debit'}` },
-                  { label: 'Max Profit', value: meta.maxProfit === 'unlimited' ? '∞ Unlimited' : `$${(meta.maxProfit as number).toFixed(0)}` },
-                  { label: 'Max Loss', value: meta.maxLoss === 'unlimited' ? '∞ Unlimited' : `$${Math.abs(meta.maxLoss as number).toFixed(0)}` },
+                  { label: 'Max Profit', value: meta.maxProfit === 'unlimited' ? '∞ Unlimited' : `$${(meta.maxProfit as number).toFixed(0)}`, tooltip: GLOSSARY['Max Profit'] },
+                  { label: 'Max Loss', value: meta.maxLoss === 'unlimited' ? '∞ Unlimited' : `$${Math.abs(meta.maxLoss as number).toFixed(0)}`, tooltip: GLOSSARY['Max Loss'] },
                   { label: 'Risk Class', value: meta.riskClass },
-                  { label: 'Margin Req.', value: meta.margin > 0 ? `$${meta.margin.toFixed(0)}` : 'None' },
-                ].map(({ label, value }) => (
+                  { label: 'Margin Req.', value: meta.margin > 0 ? `$${meta.margin.toFixed(0)}` : 'None', tooltip: GLOSSARY['Margin'] },
+                ].map(({ label, value, tooltip }) => (
                   <div key={label} style={{ background: C.surfaceUp, borderRadius: 8, padding: '12px 16px' }}>
-                    <div style={{ color: C.textMid, fontSize: 11, marginBottom: 4 }}>{label}</div>
+                    <div style={{ color: C.textMid, fontSize: 11, marginBottom: 4, display: 'flex', alignItems: 'center' }}>
+                      {label}{tooltip && <InfoTooltip text={tooltip} />}
+                    </div>
                     <div style={{ fontFamily: C.mono, color: C.text, fontSize: 14, fontWeight: 600 }}>{value}</div>
                   </div>
                 ))}
